@@ -810,17 +810,17 @@ function edgarSwing(b,i){const e=S.b[1-i],tg=tgt(b,i),a=Math.atan2(tg.y-b.y,tg.x
  S.u.push({k:'scf',o:i,a,l:.1});
  const test=(x,y,r)=>{const dx=x-b.x,dy=y-b.y,dd=Math.hypot(dx,dy);if(dd>m+r)return false;let da=Math.atan2(dy,dx)-a;da=Math.atan2(Math.sin(da),Math.cos(da));return Math.abs(da)<.7+Math.asin(Math.min(1,r/Math.max(dd,r)))};
  if(cs(e).some(c=>test(c[0],c[1],R))){
-  if(!(e.inv>0)){hit(1-i,8);b.hp=Math.min(b.mx,b.hp+3);S.f.push({x:b.x,y:b.y-R,v:3,h:1,l:.8})} // 무적이면 회복 없음
+  if(!(e.inv>0)){hit(1-i,10);b.hp=Math.min(b.mx,b.hp+6);S.f.push({x:b.x,y:b.y-R,v:6,h:1,l:.8})} // 무적이면 회복 없음
   S.u.push({k:'sh',x:e.x,y:e.y,m:16,l:.2,o:i,c:'190,140,255'})}
- for(const en of S.e)if(en.o!=i&&test(en.x,en.y,en.r)){en.hp-=8;S.f.push({x:en.x,y:en.y-en.r,v:8,l:.8})}}
+ for(const en of S.e)if(en.o!=i&&test(en.x,en.y,en.r)){en.hp-=12;S.f.push({x:en.x,y:en.y-en.r,v:8,l:.8})}}
 // 도약 착지: 원형 범위 5 피해
 function edgarLand(b,i){const e=S.b[1-i],x=b.x,y=b.y;S.u.push({k:'sh',x,y,m:40,l:.3,o:i,c:'170,110,255'});
- if(ptHit(e,x,y,40+R))hit(1-i,5);
- S.e.forEach(en=>{if(en.o!=i&&Math.hypot(en.x-x,en.y-y)<40+en.r){en.hp-=5;S.f.push({x:en.x,y:en.y-en.r,v:5,l:.8})}})}
+ if(ptHit(e,x,y,40+R))hit(1-i,10);
+ S.e.forEach(en=>{if(en.o!=i&&Math.hypot(en.x-x,en.y-y)<40+en.r){en.hp-=10;S.f.push({x:en.x,y:en.y-en.r,v:5,l:.8})}})}
 addChar({
  n:'에드거',r:'어쌔신',c:'#4b2a7a',d:'목도리 2연타 · 도약',hp:220,
- s:['① 목도리 (쿨 0.8초): 0.2초 동안 목도리를 2번 휘둘러 한 번에 8 피해(총 16). 피해를 줄 때마다 3 회복(총 6)',
-    '② 도약 (쿨 4초): 적을 향해 5타일을 날아올라 착지. 착지 지점 원형 범위에 5 피해'],
+ s:['① 목도리 (쿨 0.8초): 0.2초 동안 목도리를 2번 휘둘러 한 번에 10 피해(총 20). 피해를 줄 때마다 6 회복(총 12)',
+    '② 도약 (쿨 4초): 적을 향해 5타일을 날아올라 착지. 착지 지점 원형 범위에 10 피해'],
  sk:['목도리','도약'],
  sfx(k){ // 바람 소리: 필터 노이즈 + 휘파람
   if(k==1)[0,100].forEach(d=>setTimeout(()=>{noise(.14,.3,1800);tone(500,.12,'sine',.05,1400)},d)); // 휙-휙
