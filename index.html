@@ -68,7 +68,7 @@ canvas{width:100%;height:auto;display:block;border:5px solid #000;background:#ff
 const W=400,H=400,R=22,TILE=40,EVDOT=1,BR=Math.hypot(W-2*R,H-2*R)*.85,$=id=>document.getElementById(id);
 const LF=.33,ERR=.31; // 조준 보정: LF=적 이동 예측 비율(높을수록 정확) / ERR=조준 오차(낮을수록 정확)
 const ROLES=['탱커','어쌔신','서포터','컨트롤러','데미지딜러','저격수','투척수'];
-const CDK=['c1','c2','fr','mk','bn','st','fzn','inv','slw','kb','sl']; // 매 틱 줄어드는 타이머 목록
+const CDK=['c1','c2','fr','mk','bn','st','fzn','inv','slw','kb','sl','am']; // 매 틱 줄어드는 타이머 목록
 let S=null,role='host',conn=null,peer=null,solo=false,myIdx=0,pick=[null,null],started=false,rt=0,last=performance.now(),acc=0,fc=0;
 
 
@@ -83,10 +83,11 @@ let S=null,role='host',conn=null,peer=null,solo=false,myIdx=0,pick=[null,null],s
    [틱]    init(b) 고유 변수 초기화 / speed(b,dt) 속도 계산 / spdMul(b,sp) 감속 후 속도 보정
            tick(b,i,dt,e,bw) 매 틱 고유 로직 / touch(b) 몸통박치기 추가 피해 / busy(b) 못 움직이는 상태
            world(dt) 맵 전체 로직 / onFreeze(b,e) 상대를 얼렸을 때 / aiSkip(b,n) AI가 이 스킬을 건너뛸지
-   [표시]  hud(me,k,c) 스킬 버튼 글자 → [글자|null, 비활성(1/0)] 또는 null
+   [표시]  hud(me,k,c) 스킬 버튼 글자 → [글자|null, 비활성(1/0), 버튼색(선택)] 또는 null
            drawBg(V) 바닥 그리기 / under(V,t) 공 아래 그리기 / drawPre(b,x,y,i) 공 그리기 직전 / lift(b) 점프 높이(0~1)
            drawPost(b,x,y,dup) 공 위에 덧그리기 / fxg() 전역 효과음 / snd[[..],[..]] 스킬 효과음 / shk[] 화면 흔들림 / hrKb 홈런 넉백
    UK[종류]  = 투사체/이펙트:  upd(u,dt,e,j) 매틱 갱신(false 반환 시 삭제) / draw(u,A) 그리기 / ground 바닥 레이어
+                              hitE(u,en) 소환물 명중
                               grow 반지름 증가 속도 / miss(u) 빗나감 / hit(u,e,j) 명중 / affect(u,p,dt) 장판이 날아가는 투사체에 주는 영향
    EK[종류]  = 소환물:         upd(en,dt,e,ob,nw) / draw(en)
    GRN[번호] = 투척물(gren):   sp 속도 / s 크기 / direct 직접 명중 판정 / draw(u) / land(u,j,dh) 착지
@@ -155,7 +156,7 @@ function choose(i){$('list').style.display='none';$('pmsg').textContent='선택 
 const mk=(t,i)=>{const c=CH[t],b={t,x:W*(i?.75:.25),y:H/2,vx:i?-100:100,vy:i?90:-90,hp:c.hp,mx:c.hp,
  c1:0,c2:0,                                       // 스킬1·2 쿨타임
  fr:0,mk:0,bn:0,bd:0,st:0,fzn:0,slw:0,sf:.6,inv:0, // 공포·표식·화상·기절·동결·감속·무적
- kb:0,kx:0,ky:0,sl:0,ph:0,hid:0,sq:0,dots:[],fr2:0,frt:0}; // 넉백·미끄러짐·숨음·연발·도트·프로스트
+ kb:0,kx:0,ky:0,sl:0,ph:0,hid:0,sq:0,dots:[],fr2:0,frt:0,am:0,ap:0}; // am/ap: 취약(받는 피해 증가) 지속시간/비율 // 넉백·미끄러짐·숨음·연발·도트·프로스트
  if(c.init)c.init(b);return b};
 function tryStart(){if(pick[0]==null||pick[1]==null)return;
  S={w:-1,ct:3,gt:0,t2:0,u:[],f:[],e:[],q:null,qn:5,qc:0,b:pick.map(mk)};show('game');started=true;
@@ -163,7 +164,7 @@ function tryStart(){if(pick[0]==null||pick[1]==null)return;
 
 const cl=(v,m)=>Math.min(W-m,Math.max(m,v));
 // 피해. 표식(mk) 상태면 bn만큼 추가 피해
-function hit(j,d,bn=2){const b=S.b[j];if(b.inv>0)return;let yl=0;if(b.mk>0){d+=bn;yl=1}b.hp-=d;S.f.push({x:b.x,y:b.y-R,v:d,yl,l:.8})}
+function hit(j,d,bn=2){const b=S.b[j];if(b.inv>0)return;let yl=0;if(b.mk>0){d+=bn;yl=1}if(b.am>0)d*=1+b.ap;b.hp-=d;S.f.push({x:b.x,y:b.y-R,v:d,yl,l:.8})}
 // 충돌 원 목록 (숨은 공은 없음 / RT 분리 상태면 2개)
 const cs=b=>b.hid?[]:b.sp?[[b.x,b.y,1],[b.lx,b.ly,0]]:[[b.x,b.y,1]];
 function sg(x0,y0,x1,y1,cx,cy){const dx=x1-x0,dy=y1-y0,l=dx*dx+dy*dy;let q=l?((cx-x0)*dx+(cy-y0)*dy)/l:0;q=q<0?0:q>1?1:q;return Math.hypot(x0+dx*q-cx,y0+dy*q-cy)}
@@ -238,7 +239,7 @@ function keepU(u,dt){const j=1-u.o,e=S.b[j],k=UK[u.k];
  const px=u.x,py=u.y;u.x+=u.vx*dt;u.y+=u.vy*dt;u.rg-=Math.hypot(u.vx,u.vy)*dt;
  if(u.x<-20||u.x>W+20||u.y<-20||u.y>H+20||u.rg<=0){if(k&&k.miss)k.miss(u);return false}
  const un=S.e.length&&S.e.find(en=>en.o!=u.o&&sg(px,py,u.x,u.y,en.x,en.y)<en.r+u.s); // 소환물 명중
- if(un){if(k&&k.miss)k.miss(u);else{un.hp-=u.d;S.f.push({x:un.x,y:un.y-un.r,v:u.d,l:.8})}return false}
+ if(un){if(k&&k.hitE)k.hitE(u,un);else if(k&&k.miss)k.miss(u);else{un.hp-=u.d;S.f.push({x:un.x,y:un.y-un.r,v:u.d,l:.8})}return false}
  if(u.sk>0)u.sk-=dt;
  if(!(u.sk>0)&&segHit(e,px,py,u.x,u.y,R+u.s)){ // 공 명중
   if(k&&k.hit)k.hit(u,e,j);else{hit(j,u.d);if(u.fr)frost(e,u.fr,S.b[u.o]);if(u.kn)knock(e,u.vx,u.vy)}return false}
@@ -364,7 +365,7 @@ function drawWorld(V,n,dt){
   if(b.inv>0){gl('120,210,255',x,y,R*1.8,.6);g.strokeStyle='rgba(160,230,255,.9)';g.lineWidth=4;g.beginPath();g.arc(x,y,R+5,0,7);g.stroke()}
   if(ch.drawPost)ch.drawPost(b,x,y,dup);                                           // 캐릭터별 덧그리기
   if(b.st>0&&!b.inv&&!(b.fzn>0))em('💫',x,y-R-(dup?36:14),20);if(b.dots&&b.dots.length)em('🦠',x-R*.8,y-R*.8,15);
-  if(b.fr>0)em('😱',x,y,30);if(b.mk>0)em('🚨',x,y-R-(dup?36:14),18);if(b.bn>0)em('🔥',x+R*.8,y-R*.8,16)});
+  if(b.fr>0)em('😱',x,y,30);if(b.mk>0)em('🚨',x,y-R-(dup?36:14),18);if(b.bn>0)em('🔥',x+R*.8,y-R*.8,16);if(b.am>0)em('⚠️',x,y-R-(dup?52:30),18)});
  for(const u of V.u){const k=UK[u.k];if(!(k&&k.ground)&&!(u.dl>0))drawU(u)}      // 공 위 레이어 이펙트/투사체
  V.f.forEach(f=>{g.font='bold 18px sans-serif';g.lineWidth=3;g.strokeStyle='#fff';g.fillStyle=f.h?'#2a2':f.yl?'#e8a800':'#d22';const y=f.y-(.8-f.l)*30,s=(f.h?'+':'')+Math.round(f.v);g.strokeText(s,f.x,y);g.fillText(s,f.x,y)}); // 피해 숫자
  for(let i=P.length-1;i>=0;i--){const p=P[i];p.x+=p.vx*.005;p.y+=p.vy*.005;p.l-=.005;if(p.l<=0){P[i]=P[P.length-1];P.pop()}}
@@ -377,9 +378,9 @@ function drawHud(){
   st('n'+i,c.n+(i==myIdx?' (나)':''));sc('n'+i,'color',c.c);st('r'+i,c.r);sc('r'+i,'color',c.c);
   sc('f'+i,'width',(hp/b.mx*100)+'%');sc('g'+i,'width',(hp/b.mx*100)+'%');st('t'+i,hp+' / '+b.mx);sc('u'+i,'background',c.c)});
  const me=S.b[myIdx],mc=CH[me.t];
- [1,2].forEach(k=>{const c=k==1?me.c1:me.c2,nm=mc.sk[k-1];let t=c>0?nm+' '+Math.ceil(c):nm,dis=c>0||S.ct>0||S.w>=0;
-  if(nm=='—'){t='—';dis=1}else{const r=mc.hud&&mc.hud(me,k,c);if(r){if(r[0]!=null)t=r[0];dis=r[1]}else if(me.st>0)dis=1}
-  st('sk'+k,t+(dis?'':' ['+k+']'));if(C['d'+k]!==!!dis){C['d'+k]=!!dis;$('sk'+k).disabled=!!dis}});
+ [1,2].forEach(k=>{const c=k==1?me.c1:me.c2,nm=mc.sk[k-1];let t=c>0?nm+' '+Math.ceil(c):nm,dis=c>0||S.ct>0||S.w>=0,col='';
+  if(nm=='—'){t='—';dis=1}else{const r=mc.hud&&mc.hud(me,k,c);if(r){if(r[0]!=null)t=r[0];dis=r[1];if(!dis&&r[2])col=r[2]}else if(me.st>0)dis=1}
+  st('sk'+k,t+(dis?'':' ['+k+']'));if(C['d'+k]!==!!dis){C['d'+k]=!!dis;$('sk'+k).disabled=!!dis}sc('sk'+k,'background',col);sc('sk'+k,'color',col?'#111':'')});
  if(S.w>=0){if(S.t2<2){g.fillStyle='rgba(220,40,40,'+Math.min(1,S.t2*3)+')';g.font='bold '+(60+S.t2*10)+'px sans-serif';g.fillText('K.O.',W/2,H/2)}
   else{g.fillStyle='rgba(255,255,255,.85)';g.fillRect(0,0,W,H);g.fillStyle=S.w==myIdx?'#2a8a2a':'#c22';g.font='bold 44px sans-serif';g.fillText(S.w==myIdx?'승리! 🎉':'패배...',W/2,H/2-30);$('again').style.display='block'}}}
 
@@ -798,6 +799,146 @@ addChar({
 UK.pl={draw:(u,A)=>{const L=u.kn?.06:.03;if(u.kn)gl('255,110,60',u.x,u.y,u.s*3,.6);g.lineCap='round';g.strokeStyle=u.kn?'rgba(255,90,40,.45)':'rgba(255,170,60,.35)';g.lineWidth=u.s*(u.kn?2.4:1.8);g.beginPath();g.moveTo(u.x,u.y);g.lineTo(u.x-u.vx*L,u.y-u.vy*L);g.stroke();g.fillStyle=u.kn?'#ffe08a':u.s>3?'#ff8a1f':'#ffc247';g.beginPath();g.arc(u.x,u.y,u.s,0,7);g.fill();g.fillStyle='rgba(255,255,255,.7)';g.beginPath();g.arc(u.x-1,u.y-1,u.s*.35,0,7);g.fill();}};               // 산탄 알갱이
 UK.mz={upd:timer,draw:(u,A)=>{const o=S.b[u.o],big=!u.sm,k=u.l/(big?.45:.2),L=(big?110:46)*(1.15-k*.4),w=big?.62:.3;g.translate(o.x,o.y);g.rotate(u.a);gl('255,170,60',R*.8,0,L*.9,k*.9);g.fillStyle='rgba(255,140,30,'+k*.55+')';g.beginPath();g.moveTo(R*.5,0);g.arc(R*.5,0,L,-w,w);g.closePath();g.fill();g.fillStyle='rgba(255,240,170,'+k*.9+')';g.beginPath();g.moveTo(R*.5,0);g.arc(R*.5,0,L*.62,-w*.6,w*.6);g.closePath();g.fill();
   if(big){g.strokeStyle='rgba(255,200,90,'+k+')';g.lineWidth=5*k+1;g.beginPath();g.arc(-R*.5,0,(1-k)*85+20,0,7);g.stroke();g.lineCap='round';g.strokeStyle='rgba(255,220,120,'+k+')';g.lineWidth=2.5;for(let q=-5;q<=5;q++){const t=q*.11;g.beginPath();g.moveTo(Math.cos(t)*(R+6),Math.sin(t)*(R+6));g.lineTo(Math.cos(t)*(R+6+L*.9),Math.sin(t)*(R+6+L*.9));g.stroke()}}}};     // 총구 화염
+
+/* =====================================================================
+   ★ 에드거 ─ 어쌔신
+   목도리 휘두르기(0.2초간 2연타, 맞히면 체력 회복) / 도약(5타일 날아올라 착지 피해)
+   ===================================================================== */
+const EDGAR_REACH=R+20; // 목도리 사거리: 공 가장자리에서 0.5타일(20px)
+// 목도리 1회 휘두르기: 부채꼴 판정, 8 피해, 맞히면 3 회복
+function edgarSwing(b,i){const e=S.b[1-i],tg=tgt(b,i),a=Math.atan2(tg.y-b.y,tg.x-b.x),m=EDGAR_REACH;
+ S.u.push({k:'scf',o:i,a,l:.1});
+ const test=(x,y,r)=>{const dx=x-b.x,dy=y-b.y,dd=Math.hypot(dx,dy);if(dd>m+r)return false;let da=Math.atan2(dy,dx)-a;da=Math.atan2(Math.sin(da),Math.cos(da));return Math.abs(da)<.7+Math.asin(Math.min(1,r/Math.max(dd,r)))};
+ if(cs(e).some(c=>test(c[0],c[1],R))){
+  if(!(e.inv>0)){hit(1-i,8);b.hp=Math.min(b.mx,b.hp+3);S.f.push({x:b.x,y:b.y-R,v:3,h:1,l:.8})} // 무적이면 회복 없음
+  S.u.push({k:'sh',x:e.x,y:e.y,m:16,l:.2,o:i,c:'190,140,255'})}
+ for(const en of S.e)if(en.o!=i&&test(en.x,en.y,en.r)){en.hp-=8;S.f.push({x:en.x,y:en.y-en.r,v:8,l:.8})}}
+// 도약 착지: 원형 범위 5 피해
+function edgarLand(b,i){const e=S.b[1-i],x=b.x,y=b.y;S.u.push({k:'sh',x,y,m:40,l:.3,o:i,c:'170,110,255'});
+ if(ptHit(e,x,y,40+R))hit(1-i,5);
+ S.e.forEach(en=>{if(en.o!=i&&Math.hypot(en.x-x,en.y-y)<40+en.r){en.hp-=5;S.f.push({x:en.x,y:en.y-en.r,v:5,l:.8})}})}
+addChar({
+ n:'에드거',r:'어쌔신',c:'#4b2a7a',d:'목도리 2연타 · 도약',hp:220,
+ s:['① 목도리 (쿨 0.8초): 0.2초 동안 목도리를 2번 휘둘러 한 번에 8 피해(총 16). 피해를 줄 때마다 3 회복(총 6)',
+    '② 도약 (쿨 4초): 적을 향해 5타일을 날아올라 착지. 착지 지점 원형 범위에 5 피해'],
+ sk:['목도리','도약'],
+ snd:[[500,.1,'sawtooth',.1,900,.1,3000],[600,.3,'triangle',.14,200,.2,1500]],
+ init(b){b.sw=0;b.swt=0;b.ej=0;b.sx=0;b.sy=0;b.tx=0;b.ty=0}, // sw: 남은 휘두르기 수 / swt: 다음 휘두르기까지 / ej: 도약 남은 시간
+ busy(b){return b.ej>0},                                       // 도약 중엔 못 움직임
+ skill(i,n,b,e){
+  if(n==1){if(b.c1>0||b.sw>0||b.ej>0)return;b.c1=.8;b.sw=2;b.swt=0}
+  else{if(b.c2>0||b.ej>0||b.sw>0)return;b.c2=4;const tg=tgt(b,i),a=Math.atan2(tg.y-b.y,tg.x-b.x);
+   b.sx=b.x;b.sy=b.y;b.tx=cl(b.x+Math.cos(a)*5*TILE,R);b.ty=cl(b.y+Math.sin(a)*5*TILE,R);b.ej=.3}},
+ tick(b,i,dt){
+  if(b.sw>0){b.swt-=dt;if(b.swt<=0){edgarSwing(b,i);b.sw--;b.swt=.1}}
+  if(b.ej>0){b.ej-=dt;const p=1-Math.max(0,b.ej)/.3;b.x=b.sx+(b.tx-b.sx)*p;b.y=b.sy+(b.ty-b.sy)*p;if(b.ej<=0)edgarLand(b,i)}},
+ hud(me,k){return me.ej>0||me.sw>0?[null,1]:null},
+ lift(b){return b.ej>0?Math.sin(Math.PI*(1-b.ej/.3)):0},        // 도약 높이
+ img:'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27128%27%20height%3D%27128%27%3E%3Crect%20width%3D%27128%27%20height%3D%27128%27%20fill%3D%27%234b2a7a%27%2F%3E%3Ctext%20x%3D%2764%27%20y%3D%2790%27%20font-size%3D%2772%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%20font-family%3D%27sans-serif%27%3E%EC%97%90%3C%2Ftext%3E%3C%2Fsvg%3E'});
+UK.scf={ // 목도리 이펙트 (짙은 보라 + 흰색 줄무늬 직사각형이 앞으로 휘둘러짐)
+ upd:timer,
+ draw:(u,A)=>{const o=S.b[u.o],p=1-u.l/.1,an=u.a-.6+1.2*Math.min(1,p*1.3);g.translate(o.x,o.y);
+  g.strokeStyle='rgba(180,140,255,'+(.45*(1-p))+')';g.lineWidth=10;g.lineCap='round';g.beginPath();g.arc(0,0,EDGAR_REACH-4,u.a-.6,an);g.stroke();
+  g.rotate(an);const L0=R*.7,L1=EDGAR_REACH,seg=5,sl=(L1-L0)/seg;
+  for(let k=0;k<seg;k++){g.fillStyle=k%2?'#fff':'#3b1a66';g.fillRect(L0+k*sl,-4,sl,8)}
+  g.strokeStyle='#2a0f4a';g.lineWidth=1.5;g.strokeRect(L0,-4,L1-L0,8)}};
+
+/* =====================================================================
+   ★ 벨 ─ 저격수
+   전기 총알(8타일, 9 피해) / ⚠️ 표식탄(9타일, 맞으면 받는 피해 15%↑)
+   ※ 엔진의 '취약(am/ap)' 상태를 사용합니다: b.am=지속시간, b.ap=추가 피해 비율
+   ===================================================================== */
+const BELL_WARN_DMG=6;   // ⚠️탄 자체 피해량 (설명에 수치가 없어 임의로 6)
+const BELL_WARN_TIME=8;  // ⚠️ 표식 지속 시간(초) (설명에 없어 임의로 8)
+addChar({
+ n:'벨',r:'저격수',c:'#1fa7e8',d:'전기 총알 · ⚠️ 표식탄',hp:230,
+ s:['① 전기 총알 (쿨 2초): 8타일 길이의 전기 총알. 9 피해',
+    '② ⚠️ 표식탄 (쿨 13초): 9타일 길이의 ⚠️ 전기탄. 맞으면 머리 위에 ⚠️가 표시되고 이후 받는 피해 15% 증가. 이미 표식 상태면 피해만 줌'],
+ sk:['전기 총알','⚠️ 표식탄'],
+ snd:[[1200,.12,'sawtooth',.1,300,.2,4000],[800,.3,'square',.1,1600,.15,3000]],
+ skill(i,n,b,e){
+  if(n==1){if(b.c1>0)return;b.c1=2;pj(i,aim(b,tgt(b,i),520,.7),520,{k:'ebl',d:9,s:6,rg:8*TILE})}
+  else{if(b.c2>0)return;b.c2=13;pj(i,aim(b,tgt(b,i),460,.7),460,{k:'ewn',d:BELL_WARN_DMG,s:9,rg:9*TILE})}},
+ img:'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27128%27%20height%3D%27128%27%3E%3Crect%20width%3D%27128%27%20height%3D%27128%27%20fill%3D%27%231fa7e8%27%2F%3E%3Ctext%20x%3D%2764%27%20y%3D%2790%27%20font-size%3D%2772%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%20font-family%3D%27sans-serif%27%3E%EB%B2%A8%3C%2Ftext%3E%3C%2Fsvg%3E'});
+UK.ebl={ // 전기 총알
+ draw:(u,A)=>{const L=.05,sp=Math.hypot(u.vx,u.vy)||1,px=-u.vy/sp,py=u.vx/sp,q=Math.floor(NOW/60);
+  gl('90,200,255',u.x,u.y,20,.7);g.lineCap='round';g.strokeStyle='rgba(90,200,255,.4)';g.lineWidth=9;g.beginPath();g.moveTo(u.x,u.y);g.lineTo(u.x-u.vx*L,u.y-u.vy*L);g.stroke();
+  g.strokeStyle='#e8fbff';g.lineWidth=2.5;g.beginPath();g.moveTo(u.x,u.y);for(let k=1;k<=4;k++){const j=(rnd(k,q)-.5)*10;g.lineTo(u.x-u.vx*L*2*k/4+px*j,u.y-u.vy*L*2*k/4+py*j)}g.stroke();
+  g.fillStyle='#fff';g.beginPath();g.arc(u.x,u.y,3.5,0,7);g.fill()}};
+UK.ewn={ // ⚠️ 표식탄
+ hit(u,e,j){const fresh=!(e.am>0);hit(j,u.d);if(fresh){e.am=BELL_WARN_TIME;e.ap=.15}}, // 처음 맞았을 때만 표식 부여
+ draw:(u,A)=>{gl('255,230,60',u.x,u.y,26,.8);g.lineCap='round';g.strokeStyle='rgba(120,210,255,.6)';g.lineWidth=3;
+  for(let k=0;k<3;k++){const a=rnd(k,Math.floor(NOW/80))*6.28;g.beginPath();g.moveTo(u.x+Math.cos(a)*10,u.y+Math.sin(a)*10);g.lineTo(u.x+Math.cos(a)*19,u.y+Math.sin(a)*19);g.stroke()}
+  em('⚠️',u.x,u.y,24)}};
+
+/* =====================================================================
+   ★ 비 ─ 저격수
+   벌 한 마리(맞으면 강화 → 다음 탄 23 피해) / 벌 떼(7마리 부채꼴, 감속)
+   ===================================================================== */
+const BEE_SWARM_CD=10; // 벌 떼 쿨타임 (설명에 없어 임의로 10초)
+// 벌 그리기 (x,y 위치, ang 방향, col 몸 색, sc 크기)
+function drawBee(x,y,ang,col,sc){g.save();g.translate(x,y);g.rotate(ang);g.scale(sc,sc);
+ g.fillStyle='rgba(255,255,255,.75)';g.beginPath();g.ellipse(-1,-5,4,2.5,.5,0,7);g.ellipse(-1,5,4,2.5,-.5,0,7);g.fill();
+ g.fillStyle=col;g.beginPath();g.ellipse(0,0,7,4.5,0,0,7);g.fill();
+ g.fillStyle='#222';g.fillRect(-3,-4,2,8);g.fillRect(1,-4,2,8);g.beginPath();g.arc(6,0,1.4,0,7);g.fill();g.restore()}
+addChar({
+ n:'비',r:'저격수',c:'#f2b705',d:'강화 벌 · 벌 떼',hp:215,
+ s:['① 벌 (쿨 3초): 7타일 길이로 벌 한 마리 발사. 맞으면 10 피해 + 주위 벌이 푸른색으로 변하고 버튼이 노랗게 변함. 이때 다음 벌이 적중하면 강화탄으로 23 피해. 빗나가면 초기화',
+    '② 벌 떼 (쿨 10초): 벌 7마리를 부채꼴로 내보냄. 적중한 벌은 사라지고 개당 5 피해 + 2초간 이동속도 35% 감소'],
+ sk:['벌','벌 떼'],
+ snd:[[900,.1,'triangle',.1,1300],[700,.35,'sawtooth',.12,400,.2,2000]],
+ init(b){b.bc=0},                                           // bc: 1이면 다음 벌이 강화탄
+ skill(i,n,b,e){
+  if(n==1){if(b.c1>0)return;b.c1=3;pj(i,aim(b,tgt(b,i),420,.8),420,{k:'bee',d:b.bc?23:10,s:7,rg:7*TILE,en:b.bc?1:0})}
+  else{if(b.c2>0)return;b.c2=BEE_SWARM_CD;const a=aim(b,tgt(b,i),380,.5);
+   for(let k=0;k<7;k++)pj(i,a+(k-3)*.15,380,{k:'bsw',d:5,s:5,rg:6*TILE})}},
+ hud(me,k){return k==1&&me.bc&&me.c1<=0&&me.st<=0&&!(S.ct>0||S.w>=0)?['강화 벌!',0,'#ffd21f']:null}, // 세 번째 값 = 버튼 색
+ drawPost(b,x,y,dup){const col=b.bc?'#4aa8ff':'#ffc400';for(let k=0;k<3;k++){const t=NOW/300+k*2.094;drawBee(x+Math.cos(t)*(R+9),y+Math.sin(t)*(R+9)*.7,t+1.57,col,.8)}}, // 주위를 도는 벌
+ img:'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27128%27%20height%3D%27128%27%3E%3Crect%20width%3D%27128%27%20height%3D%27128%27%20fill%3D%27%23f2b705%27%2F%3E%3Ctext%20x%3D%2764%27%20y%3D%2790%27%20font-size%3D%2772%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%20font-family%3D%27sans-serif%27%3E%EB%B9%84%3C%2Ftext%3E%3C%2Fsvg%3E'});
+UK.bee={ // 벌 한 마리
+ miss(u){S.b[u.o].bc=0},                                    // 빗나가면 초기화
+ hitE(u,en){S.b[u.o].bc=0;en.hp-=u.d;S.f.push({x:en.x,y:en.y-en.r,v:u.d,l:.8})}, // 소환물에 맞으면 피해 + 초기화
+ hit(u,e,j){hit(j,u.d);S.b[u.o].bc=u.en?0:1},               // 일반탄 적중 → 강화 / 강화탄 적중 → 초기화
+ draw:(u,A)=>{if(u.en)gl('80,170,255',u.x,u.y,22,.6);drawBee(u.x,u.y,A,u.en?'#4aa8ff':'#ffc400',1.5)}};
+UK.bsw={ // 벌 떼의 벌 (적중 시 5 피해 + 2초간 35% 감속)
+ hit(u,e,j){hit(j,5);e.slw=Math.max(e.slw,2);e.sf=.65},
+ draw:(u,A)=>drawBee(u.x,u.y,A,'#ffc400',1.1)};
+
+/* =====================================================================
+   ★ 포코 ─ 서포터
+   기타 음파(좌우 65° 부채꼴 6 피해) / 치유 음파(초록, 자신 10 회복)
+   ===================================================================== */
+const POCO_HALF=65*Math.PI/180; // 부채꼴 좌우 각도
+const POCO_RANGE1=5*TILE;       // 기타 음파 사거리 (설명에 없어 임의로 5타일)
+const POCO_V1=240,POCO_V2=520;  // 음파 퍼지는 속도 (치유 음파가 훨씬 빠름)
+const POCO_RANGE2=9*TILE;       // 치유 음파 사거리 (더 김)
+// 부채꼴 음파 갱신: 퍼지는 원호가 적을 지나갈 때 1회 피해 (d=0이면 피해 없음)
+function pocoWave(u,dt,e,j,v,max){u.r+=v*dt;
+ if(!u.h&&u.d>0&&!e.hid){const d=Math.hypot(e.x-u.x,e.y-u.y);let da=Math.atan2(e.y-u.y,e.x-u.x)-u.a;da=Math.atan2(Math.sin(da),Math.cos(da));
+  if(Math.abs(d-u.r)<R+8&&Math.abs(da)<POCO_HALF+Math.asin(Math.min(1,R/Math.max(d,R)))){u.h=1;hit(j,u.d)}}
+ return u.r<max}
+// 부채꼴 음파 그리기 (rgb 문자열, max 사거리)
+function pocoDraw(u,rgb,max){const al=Math.max(.25,1-u.r/max);g.lineCap='round';
+ for(let q=0;q<3;q++){const r=u.r-q*13;if(r<=0)continue;const a=al*(1-q*.28);
+  g.strokeStyle='rgba('+rgb+','+a*.3+')';g.lineWidth=16;g.beginPath();g.arc(u.x,u.y,r,u.a-POCO_HALF,u.a+POCO_HALF);g.stroke();
+  g.strokeStyle='rgba('+rgb+','+a+')';g.lineWidth=5;g.stroke();g.strokeStyle='rgba(255,255,255,'+a*.7+')';g.lineWidth=1.5;g.stroke()}}
+addChar({
+ n:'포코',r:'서포터',c:'#2f9c95',d:'기타 음파 · 치유 음파',hp:225,
+ s:['① 기타 음파 (쿨 4초): 기타를 연주해 좌우 65° 부채꼴로 넓게 음파를 날림. 6 피해',
+    '② 치유 음파 (쿨 15초): 매우 넓은 초록 음파를 쏴 자신의 HP를 10 회복. 일반 공격보다 사거리가 길고 훨씬 빠름'],
+ sk:['기타 음파','치유 음파'],
+ snd:[[330,.3,'triangle',.14,440,.1,1500],[520,.5,'sine',.14,780]],
+ skill(i,n,b,e){
+  if(n==1){if(b.c1>0)return;b.c1=4;S.u.push({k:'pws',x:b.x,y:b.y,a:aim(b,tgt(b,i),POCO_V1),r:0,o:i,h:0,d:6})}
+  else{if(b.c2>0)return;b.c2=15;S.u.push({k:'phw',x:b.x,y:b.y,a:aim(b,tgt(b,i),POCO_V2),r:0,o:i,h:0,d:0});
+   b.hp=Math.min(b.mx,b.hp+10);S.f.push({x:b.x,y:b.y-R,v:10,h:1,l:.8})}}, // 치유는 사용 즉시 적용
+ img:'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%27128%27%20height%3D%27128%27%3E%3Crect%20width%3D%27128%27%20height%3D%27128%27%20fill%3D%27%232f9c95%27%2F%3E%3Ctext%20x%3D%2764%27%20y%3D%2790%27%20font-size%3D%2772%27%20text-anchor%3D%27middle%27%20fill%3D%27white%27%20font-family%3D%27sans-serif%27%3E%ED%8F%AC%3C%2Ftext%3E%3C%2Fsvg%3E'});
+UK.pws={ground:1,grow:POCO_V1, // 기타 음파
+ upd(u,dt,e,j){return pocoWave(u,dt,e,j,POCO_V1,POCO_RANGE1)},
+ draw:(u,A)=>pocoDraw(u,'255,170,60',POCO_RANGE1)};
+UK.phw={ground:1,grow:POCO_V2, // 치유 음파
+ upd(u,dt,e,j){return pocoWave(u,dt,e,j,POCO_V2,POCO_RANGE2)},
+ draw:(u,A)=>pocoDraw(u,'60,210,110',POCO_RANGE2)};
 
 
 /* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
